@@ -254,7 +254,7 @@ class SLDSStructuredMeanFieldVariationalPosterior(VariationalPosterior):
     @ensure_variational_args_are_lists
     def __init__(self, model, datas,
                  inputs=None, masks=None, tags=None,
-                 initial_variance=1):
+                 initial_variance=1, num_continuous_samples=1):
 
         super(SLDSStructuredMeanFieldVariationalPosterior, self).\
             __init__(model, datas, masks, tags)
@@ -264,6 +264,7 @@ class SLDSStructuredMeanFieldVariationalPosterior(VariationalPosterior):
         self.K = model.K
         self.Ts = [data.shape[0] for data in datas]
         self.initial_variance = initial_variance
+        self._num_continuous_samples = num_continuous_samples
 
         self._discrete_state_params = None
         self._discrete_expectations = None
@@ -313,13 +314,18 @@ class SLDSStructuredMeanFieldVariationalPosterior(VariationalPosterior):
         self._continuous_state_params = value
 
         # Rerun the Kalman smoother with the updated parameters
+        kalman_args = (prms["J_ini"], prms["h_ini"], 0,
+                prms["J_dyn_11"], prms["J_dyn_21"], prms["J_dyn_22"],
+                prms["h_dyn_1"], prms["h_dyn_2"], 0,
+                prms["J_obs"], prms["h_obs"], 0)
         self._continuous_expectations = \
-            [kalman_info_smoother(prms["J_ini"], prms["h_ini"], 0,
-                                  prms["J_dyn_11"], prms["J_dyn_21"], prms["J_dyn_22"],
-                                  prms["h_dyn_1"], prms["h_dyn_2"], 0,
-                                  prms["J_obs"], prms["h_obs"], 0)
+            [kalman_info_smoother(*kalman_args)
              for prms in self._continuous_state_params]
 
+        # Rerun the Kalman sampler since the params have changed.
+        self._continuous_samples = [[kalman_info_sample(*kalman_args)
+                for prms in self._continuous_state_params]
+                for _ in range(self._num_continuous_samples)]
 
     def _initialize_discrete_state_params(self, data, input, mask, tag):
         T = data.shape[0]
@@ -396,11 +402,13 @@ class SLDSStructuredMeanFieldVariationalPosterior(VariationalPosterior):
                 for prms in self._discrete_state_params]
 
     def sample_continuous_states(self):
-        return [kalman_info_sample(prms["J_ini"], prms["h_ini"], 0,
-                                   prms["J_dyn_11"], prms["J_dyn_21"], prms["J_dyn_22"],
-                                   prms["h_dyn_1"], prms["h_dyn_2"], 0,
-                                   prms["J_obs"], prms["h_obs"], 0)
-                for prms in self._continuous_state_params]
+        # return [kalman_info_sample(prms["J_ini"], prms["h_ini"], 0,
+        #                            prms["J_dyn_11"], prms["J_dyn_21"], prms["J_dyn_22"],
+        #                            prms["h_dyn_1"], prms["h_dyn_2"], 0,
+        #                            prms["J_obs"], prms["h_obs"], 0)
+        #         for prms in self._continuous_state_params]
+        # use cached samples when possible
+        return self._continuous_samples
 
     def sample(self):
         return list(zip(self.sample_discrete_states(), self.sample_continuous_states()))

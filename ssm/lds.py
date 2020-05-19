@@ -363,11 +363,10 @@ class SLDS(object):
 
     def _fit_laplace_em_discrete_state_update(
         self, variational_posterior, datas,
-        inputs, masks, tags,
-        num_samples):
+        inputs, masks, tags):
 
         # 0. Draw samples of q(x) for Monte Carlo approximating expectations
-        x_sampless = [variational_posterior.sample_continuous_states() for _ in range(num_samples)]
+        x_sampless = variational_posterior.sample_continuous_states()
         # Convert this to a list of length len(datas) where each entry
         # is a tuple of length num_samples
         x_sampless = list(zip(*x_sampless))
@@ -561,7 +560,7 @@ class SLDS(object):
                                       alpha):
 
         # Compute necessary expectations either analytically or via samples
-        continuous_samples = variational_posterior.sample_continuous_states()
+        continuous_samples = variational_posterior.sample_continuous_states()[0]
         discrete_expectations = variational_posterior.discrete_expectations
 
         # Approximate update of initial distribution  and transition params.
@@ -614,17 +613,15 @@ class SLDS(object):
 
         def estimate_expected_log_joint(n_samples):
             exp_log_joint = 0.0
-            for sample in range(n_samples):
+            continuous_samples = variational_posterior.sample_continuous_states()
+            discrete_expectations = variational_posterior.discrete_expectations
 
-                # sample continuous states
-                continuous_samples = variational_posterior.sample_continuous_states()
-                discrete_expectations = variational_posterior.discrete_expectations
-
+            for sample in continuous_samples:
                 # log p(theta)
                 exp_log_joint += self.log_prior()
 
                 for x, (Ez, Ezzp1, _), data, input, mask, tag in \
-                    zip(continuous_samples, discrete_expectations, datas, inputs, masks, tags):
+                    zip(sample, discrete_expectations, datas, inputs, masks, tags):
 
                     # The "mask" for x is all ones
                     x_mask = np.ones_like(x, dtype=bool)
@@ -644,7 +641,6 @@ class SLDS(object):
     def _fit_laplace_em(self, variational_posterior, datas,
                         inputs=None, masks=None, tags=None,
                         num_iters=100,
-                        num_samples=1,
                         continuous_optimizer="newton",
                         continuous_tolerance=1e-4,
                         continuous_maxiter=100,
@@ -667,7 +663,7 @@ class SLDS(object):
             # 1. Update the discrete state posterior q(z) if K>1
             if self.K > 1:
                 self._fit_laplace_em_discrete_state_update(
-                    variational_posterior, datas, inputs, masks, tags, num_samples)
+                    variational_posterior, datas, inputs, masks, tags)
 
             # 2. Update the continuous state posterior q(x)
             self._fit_laplace_em_continuous_state_update(
