@@ -24,7 +24,7 @@ class InitialStateDistribution(object):
 
     @property
     def initial_state_distn(self):
-        return np.exp(self.log_pi0 - logsumexp(self.log_pi0)) #make initial probability of each state equal
+        return np.exp(self.log_pi0 - logsumexp(self.log_pi0)) 
 
     @property
     def log_initial_state_distn(self):
